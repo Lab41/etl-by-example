@@ -1,0 +1,18 @@
+@namespace("org.lab41.sample.etl.domain")
+
+
+/**
+*  Reference for Avro IDL (AVDL) can be found here --> http://avro.apache.org/docs/1.4.0/idl.html
+*/
+
+protocol Types 
+{
+    record SampleRecord {
+        string requiredName;
+        union {null, string} optionalName;
+        long dataItemLong;
+        int  dataItemInt; 
+        long startTime;
+        long endTime;       
+    }
+}

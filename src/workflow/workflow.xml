@@ -1,0 +1,215 @@
+<workflow-app xmlns="uri:oozie:workflow:0.2" name="map-reduce-wf">
+	<start to="checkValidSetup" />
+
+	<decision name="checkValidSetup">
+		<switch>
+			<case to="fail">${fs:exists(workingFullPath) == false}</case>
+			<case to="fail">${fs:exists(inputFullPath) == false}</case>
+			<case to="fail">${fs:exists(archiveFullPath) == false}</case>
+			<case to="fail">${fs:exists(finalFullPath) == false}</case>
+			<default to="prepareStagingDir" />
+		</switch>
+	</decision>
+
+	<action name="prepareStagingDir">
+		<fs>
+			<mkdir path='${workingFullPath}/${wf:id()}' />
+		</fs>
+		<ok to="moveRawToWorking" />
+		<error to="fail" />
+	</action>
+
+	<action name='moveRawToWorking'>
+		<java>
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<configuration>
+				<property>
+					<name>mapred.job.queue.name</name>
+					<value>${queueName}</value>
+				</property>
+			</configuration>
+			<main-class>org.lab41.sample.etl.fs.MoveMultiple</main-class>
+			<arg>${inputFullPath}</arg>
+			<arg>${workingFullPath}/${wf:id()}</arg>
+			<capture-output />
+		</java>
+		<ok to="mr-node" />
+		<error to="fail" />
+	</action>
+
+	<action name="mr-node">
+		<map-reduce>
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<configuration>
+				<!-- set the memory for the JVM -->
+				<property>
+					<name>oozie.launcher.mapred.child.java.opts</name>
+					<value>-server -Xmx4G</value>
+				</property>
+
+				<property>
+					<name>mapred.job.queue.name</name>
+					<value>${queueName}</value>
+				</property>
+
+				<!-- tell oozie that we are using the new mapreduce api -->
+				<property>
+					<name>mapred.mapper.new-api</name>
+					<value>true</value>
+				</property>
+				<property>
+					<name>mapred.reducer.new-api</name>
+					<value>true</value>
+				</property>
+
+				<!-- this is how to specify the mapper/reducer with the new api -->
+				<property>
+					<name>mapreduce.map.class</name>
+					<value>org.lab41.sample.etl.mapreduce.MapperRawToAvro
+					</value>
+				</property>
+				<property>
+					<name>mapreduce.reduce.class</name>
+					<value> org.lab41.sample.etl.mapreduce.ReducerByDateTime
+					</value>
+				</property>
+
+				<!-- schema for key value pair used by mapper -->
+				<property>
+					<name>avro.output.schema</name>
+					<value>{"type":"record","name":"Pair","namespace":"org.apache.avro.mapred","fields":[{"name":"key","type":"long","doc":""},{"type":"record","name":"SampleRecord","namespace":"org.lab41.sample.etl.domain","fields":[{"name":"requiredName","type":"string"},{"name":"optionalName","type":["null","string"]},{"name":"dataItemLong","type":"long"},{"name":"dataItemInt","type":"int"},{"name":"startTime","type":"long"},{"name":"endTime","type":"long"}]}]}
+					</value>
+				</property>
+
+				<!-- set the map output key info -->
+				<property>
+					<name>mapred.mapoutput.key.class</name>
+					<value>org.apache.avro.mapred.AvroKey</value>
+				</property>
+				<property>
+					<name>mapred.output.key.comparator.class</name>
+					<value>org.apache.avro.hadoop.io.AvroKeyComparator</value>
+				</property>
+				<property>
+					<name>avro.serialization.key.writer.schema</name>
+					<value>"long"</value>
+				</property>
+				<property>
+					<name>avro.schema.output.key</name>
+					<value>{"type":"record","name":"SampleRecord","namespace":"org.lab41.sample.etl.domain","fields":[{"name":"requiredName","type":"string"},{"name":"optionalName","type":["null","string"]},{"name":"dataItemLong","type":"long"},{"name":"dataItemInt","type":"int"},{"name":"startTime","type":"long"},{"name":"endTime","type":"long"}]}
+					</value>
+				</property>
+
+
+
+				<!-- set the map output value info -->
+				<property>
+					<name>mapred.mapoutput.value.class</name>
+					<value>org.apache.avro.mapred.AvroValue</value>
+				</property>
+
+
+				<!-- set the multiple outputs settings for writing to hdfs -->
+				<property>
+					<name>avro.mapreduce.multipleoutputs.namedOutput.sampleRecord.format
+					</name>
+					<value>org.apache.avro.mapreduce.AvroKeyOutputFormat</value>
+				</property>
+				<property>
+					<name>avro.mapreduce.multipleoutputs.namedOutput.sampleRecord.keyschema
+					</name>
+					<value>{"type":"record","name":"SampleRecord","namespace":"org.lab41.sample.etl.domain","fields":[{"name":"requiredName","type":"string"},{"name":"optionalName","type":["null","string"]},{"name":"dataItemLong","type":"long"},{"name":"dataItemInt","type":"int"},{"name":"startTime","type":"long"},{"name":"endTime","type":"long"}]}
+					</value>
+				</property>
+				<property>
+					<name>avro.mapreduce.multipleoutputs</name>
+					<value>sampleRecord</value>
+				</property>
+
+
+
+
+
+				<!-- serialization configuration -->
+				<property>
+					<name>io.serializations</name>
+					<value>org.apache.hadoop.io.serializer.WritableSerialization,org.apache.hadoop.io.serializer.avro.AvroSpecificSerialization,org.apache.hadoop.io.serializer.avro.AvroReflectSerialization,org.apache.avro.hadoop.io.AvroSerialization
+					</value>
+				</property>
+				<property>
+					<name>avro.serialization.value.reader.schema</name>
+					<value>{"type":"record","name":"SampleRecord","namespace":"org.lab41.sample.etl.domain","fields":[{"name":"requiredName","type":"string"},{"name":"optionalName","type":["null","string"]},{"name":"dataItemLong","type":"long"},{"name":"dataItemInt","type":"int"},{"name":"startTime","type":"long"},{"name":"endTime","type":"long"}]}
+					</value>
+				</property>
+				<property>
+					<name>avro.serialization.value.writer.schema</name>
+					<value>{"type":"record","name":"SampleRecord","namespace":"org.lab41.sample.etl.domain","fields":[{"name":"requiredName","type":"string"},{"name":"optionalName","type":["null","string"]},{"name":"dataItemLong","type":"long"},{"name":"dataItemInt","type":"int"},{"name":"startTime","type":"long"},{"name":"endTime","type":"long"}]}
+					</value>
+				</property>
+				<property>
+					<name>avro.serialization.key.reader.schema</name>
+					<value>"long"</value>
+				</property>
+
+
+				<property>
+					<name>mapred.map.tasks</name>
+					<value>1</value>
+				</property>
+				<!-- Input/Output -->
+				<property>
+					<name>mapred.input.dir</name>
+					<value>${workingFullPath}/${wf:id()}/</value>
+				</property>
+				<property>
+					<name>mapred.output.dir</name>
+					<value>${workingFullPath}/output_${wf:id()}</value>
+				</property>
+			</configuration>
+		</map-reduce>
+		<ok to="moveOutputToFinal" />
+		<error to="fail" />
+	</action>
+	<action name='moveOutputToFinal'>
+		<java>
+			<job-tracker>${jobTracker}</job-tracker>
+			<name-node>${nameNode}</name-node>
+			<configuration>
+				<property>
+					<name>mapred.job.queue.name</name>
+					<value>${queueName}</value>
+				</property>
+			</configuration>
+			<main-class>org.lab41.sample.etl.fs.MoveMultiple</main-class>
+			<arg>${workingFullPath}/output_${wf:id()}/sample-record</arg>
+			<arg>${finalFullPath}</arg>
+			<capture-output />
+		</java>
+		<ok to="moveRawToArchive" />
+		<error to="fail" />
+	</action>
+	<action name="moveRawToArchive">
+		<fs>
+			<move source="${workingFullPath}/${wf:id()}/" target="${archiveFullPath}/${wf:id()}" />
+		</fs>
+		<ok to="cleanup" />
+		<error to="fail" />
+	</action>
+	<action name="cleanup">
+		<fs>
+			<delete path="${workingFullPath}/output_${wf:id()}" />
+			<delete path="${baseDir}/working/${wf:id()}" />
+		</fs>
+		<ok to="end" />
+		<error to="fail" />
+	</action>
+
+	<kill name="fail">
+		<message>Map/Reduce failed, error
+			message[${wf:errorMessage(wf:lastErrorNode())}]
+		</message>
+	</kill>
+	<end name="end" />
+</workflow-app>
