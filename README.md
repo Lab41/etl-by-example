@@ -26,3 +26,5 @@ Contributing
 ========
 
 Contributions are most welcome to both the wiki and the code.  To contribute, issue a pull request, make the changes, and we will merge it back into the trunk. 
+
+[![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/Lab41/etl-by-example/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
